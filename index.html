@@ -39,8 +39,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;heigh
 .ch.cur{background:var(--ac);color:#1b1a2e}.ch.cur span{color:#1b1a2e}.ch.cur:before{content:'🔖 '}
 </style></head><body>
 <section id="lib"><h1>Sur l’iPad</h1><div id="list"></div><h1 id="cath" class="hide">À télécharger</h1><div id="cat"></div>
-<label class="add" for="f" onclick="want=null">Ajouter un livre hors catalogue</label>
-<div id="st" style="color:var(--mu);margin-top:14px"></div><input id="f" type="file" multiple class="vh"></section>
+<label class="add" for="f" onclick="want=null;document.getElementById('st').textContent='Ouverture du sélecteur…'">Ajouter un livre hors catalogue</label>
+<div id="st" style="color:var(--mu);margin-top:14px"></div><div style="color:var(--mu);font-size:13px;margin-top:40px;opacity:.6">version 6</div><input id="f" type="file" multiple class="vh"></section>
 
 <section id="fi" class="hide"><button id="fback">‹ Bibliothèque</button><div id="fh"><img id="fcov" class="cov"><div><div id="ft"></div><div id="fa"></div></div></div><p id="fr"></p><p id="ff"></p><button class="add" id="fgo">Charger ce livre</button></section>
 <section id="pl" class="hide"><button id="back">‹ Bibliothèque</button>
@@ -110,7 +110,7 @@ async function importFiles(fs,w){
  var t=w?w.titre:prompt('Titre du livre :',fs[0].name.replace(/\.[^.]+$/,'').replace(/[\s_-]*\d+$/,''));if(!t)return;var id=w?w.id:Date.now();
  try{if(w)await dropBook(id);for(var i=0;i<fs.length;i++){status('Import du chapitre '+(i+1)+' sur '+fs.length+'…');await put({book:id,idx:i,name:fs[i].name,blob:fs[i]})}await finish(id,t,fs.length,w)}
  catch(err){status();await purge(id);alert('Espace insuffisant ou erreur : essaie avec moins de fichiers.')}}
-$('f').onchange=async function(e){var fs=[].slice.call(e.target.files);e.target.value='';if(!fs.length)return;
+$('f').onchange=async function(e){var fs=[].slice.call(e.target.files);e.target.value='';if(!fs.length)return;$('st').textContent='Fichiers reçus : '+fs.length;
  var z=fs.filter(function(f){return /\.zip$/i.test(f.name)}),r=fs.filter(function(f){return !/\.zip$/i.test(f.name)});
  var w=want;want=null;if(w){$('fi').classList.add('hide');$('lib').classList.remove('hide')}
  if(w&&z.length){if(w.fichier&&z[0].name!==w.fichier&&!confirm('Tu as choisi « '+z[0].name+' » mais le livre attendu est « '+w.fichier+' ». Continuer ?'))return;await importZip(z[0],w);return}
