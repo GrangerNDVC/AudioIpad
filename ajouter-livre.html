@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><title>Ajouter un livre au catalogue</title>
+<style>
+body{font:17px system-ui,sans-serif;max-width:760px;margin:30px auto;padding:0 16px;color:#222;line-height:1.4}
+h1{font-size:25px}label{display:block;margin:14px 0 4px;font-weight:600}
+input[type=text],textarea{width:100%;box-sizing:border-box;padding:9px;font:inherit;border:1px solid #aab;border-radius:6px}
+textarea{height:110px}button{font:inherit;padding:10px 18px;border-radius:8px;border:0;background:#2b4a8a;color:#fff;cursor:pointer;margin:10px 8px 4px 0}
+button.s{background:#e6e6ee;color:#222;padding:6px 12px;margin:0}
+.box{border:1px solid #ccd;border-radius:10px;padding:14px 18px;margin:18px 0}
+img{width:60px;height:80px;object-fit:cover;border-radius:4px;background:#eee}
+.it{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #eee}.it span{flex:1}
+#msg{font-weight:600;color:#1a6b2e;margin-top:10px}.mu{color:#667;font-size:15px}
+</style></head><body>
+<h1>Catalogue de livres</h1>
+<div class="box"><b>1. Choisis le dossier de ton projet</b> (celui qui contient index.html)<br>
+<button id="dir">Choisir le dossier</button><span id="dmsg" class="mu"></span>
+<div class="mu">Demande une autorisation d'écriture : accepte. Fonctionne avec Chrome ou Edge.</div></div>
+
+<div class="box"><b>2. Ajoute un livre</b>
+<label>Titre</label><input type="text" id="t">
+<label>Auteur (facultatif)</label><input type="text" id="a">
+<label>Résumé</label><textarea id="r"></textarea>
+<label>Image de couverture (facultative)</label><input type="file" id="im" accept="image/*"> <img id="pv" alt="">
+<label>Nom du fichier zip dans iCloud Drive</label><input type="text" id="fz">
+<div class="mu">Rempli automatiquement d'après le titre. Corrige-le si ton zip s'appelle autrement.</div>
+<button id="add">Ajouter à la liste</button></div>
+
+<div class="box"><b>3. Livres du catalogue</b><div id="list"></div>
+<button id="save">Enregistrer dans le dossier</button><div id="msg"></div></div>
+
+<script>
+var dir=null,L=[],blob=null,$=function(i){return document.getElementById(i)};
+function slug(s){return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}
+$('t').oninput=function(){if(!$('fz').dataset.m)$('fz').value=slug(this.value)+'.zip'};
+$('fz').oninput=function(){this.dataset.m=1};
+function resize(f,cb){var im=new Image(),u=URL.createObjectURL(f);im.onload=function(){var c=document.createElement('canvas');c.width=240;c.height=320;var x=c.getContext('2d'),r=Math.max(240/im.width,320/im.height),w=im.width*r,h=im.height*r;x.fillStyle='#fff';x.fillRect(0,0,240,320);x.drawImage(im,(240-w)/2,(320-h)/2,w,h);c.toBlob(cb,'image/jpeg',0.8)};im.src=u}
+$('im').onchange=function(){var f=this.files[0];if(!f){blob=null;$('pv').removeAttribute('src');return}resize(f,function(b){blob=b;$('pv').src=URL.createObjectURL(b)})};
+function render(){var h=$('list');h.innerHTML=L.length?'':'<p class="mu">Aucun livre pour le moment.</p>';
+ L.forEach(function(l,i){var d=document.createElement('div');d.className='it';
+  var src=l._b?URL.createObjectURL(l._b):'';d.innerHTML=(src?'<img src="'+src+'">':'<img alt="">')+'<span><b></b><br><small class="mu"></small></span><button class="s">Retirer</button>';
+  d.querySelector('b').textContent=l.titre;d.querySelector('small').textContent=(l.auteur||'')+(l.auteur?' · ':'')+l.fichier;
+  d.querySelector('button').onclick=function(){L.splice(i,1);render()};h.appendChild(d)})}
+$('add').onclick=function(){var t=$('t').value.trim(),r=$('r').value.trim();if(!t||!r){alert('Le titre et le résumé sont obligatoires.');return}
+ var id=slug(t);if(L.some(function(l){return l.id===id})){alert('Ce livre est déjà dans la liste.');return}
+ L.push({id:id,titre:t,auteur:$('a').value.trim()||undefined,resume:r,image:blob?'couvertures/'+id+'.jpg':undefined,fichier:$('fz').value.trim()||id+'.zip',_b:blob});
+ ['t','a','r','fz','im'].forEach(function(k){$(k).value='';});delete $('fz').dataset.m;blob=null;$('pv').removeAttribute('src');$('msg').textContent='';render()};
+$('dir').onclick=async function(){
+ if(!window.showDirectoryPicker){$('dmsg').textContent=' Ce navigateur ne le permet pas : utilise Chrome ou Edge.';return}
+ try{dir=await showDirectoryPicker({mode:'readwrite'})}catch(e){return}
+ try{var fh=await dir.getFileHandle('catalogue.json');L=JSON.parse(await(await fh.getFile()).text()).livres||[]}catch(e){L=[]}
+ $('dmsg').textContent=' Dossier « '+dir.name+' » : '+L.length+' livre(s) dans le catalogue.';render()};
+async function write(d,name,data){var fh=await d.getFileHandle(name,{create:true}),w=await fh.createWritable();await w.write(data);await w.close()}
+$('save').onclick=async function(){
+ if(!dir){alert('Choisis d’abord le dossier du projet (étape 1).');return}
+ try{var cd=await dir.getDirectoryHandle('couvertures',{create:true});
+  for(var i=0;i<L.length;i++)if(L[i]._b)await write(cd,L[i].id+'.jpg',L[i]._b);
+  var out={livres:L.map(function(l){var o={};Object.keys(l).forEach(function(k){if(k[0]!=='_'&&l[k]!==undefined)o[k]=l[k]});return o})};
+  await write(dir,'catalogue.json',JSON.stringify(out,null,2));
+  $('msg').textContent='Enregistré ! Envoie maintenant le dossier sur GitHub : au prochain passage avec le Wi-Fi, les livres apparaîtront sur l’iPad.'
+ }catch(e){$('msg').style.color='#a33';$('msg').textContent='Erreur : '+e.message}};
+render();
+</script></body></html>

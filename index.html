@@ -26,7 +26,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;heigh
 #pp{background:var(--ac);color:#1b1a2e;flex:1.6;font-size:28px}
 .lbl{color:var(--mu);font-size:17px;margin:22px 0 4px}
 .sl button.on{background:var(--ac);color:#1b1a2e}
-#back{background:none;color:var(--mu);padding:12px 0}
+#back,#fback{background:none;color:var(--mu);padding:12px 0}
+#fh{display:flex;gap:16px;margin:10px 0}#fcov{width:120px;height:160px}#ft{font-size:26px}#fa{color:var(--mu);margin-top:6px}#fr{line-height:1.5}#ff{color:var(--mu);font-size:17px}h1#cath{margin-top:34px}
 .book .t{display:flex;align-items:center;gap:14px}.t span{flex:1}
 .cov{width:64px;height:86px;border-radius:8px;object-fit:cover;background:var(--pn);flex:none}.cov:not([src]){visibility:hidden}
 #fiche{display:flex;gap:14px;margin:6px 0 10px}
@@ -37,10 +38,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;heigh
 .ch{display:block;width:100%;text-align:left;margin-bottom:8px;font-size:18px;padding:14px 16px}.ch span{color:var(--mu);margin-right:8px}
 .ch.cur{background:var(--ac);color:#1b1a2e}.ch.cur span{color:#1b1a2e}.ch.cur:before{content:'🔖 '}
 </style></head><body>
-<section id="lib"><h1>Ma bibliothèque</h1><div id="list"></div>
-<button class="add" onclick="document.getElementById('f').click()">Ajouter un livre</button>
+<section id="lib"><h1>Sur l’iPad</h1><div id="list"></div><h1 id="cath" class="hide">À télécharger</h1><div id="cat"></div>
+<button class="add" onclick="want=null;document.getElementById('f').click()">Ajouter un livre hors catalogue</button>
 <div id="st" style="color:var(--mu);margin-top:14px"></div><input id="f" type="file" accept="audio/*,.zip,application/zip" multiple class="hide"></section>
 
+<section id="fi" class="hide"><button id="fback">‹ Bibliothèque</button><div id="fh"><img id="fcov" class="cov"><div><div id="ft"></div><div id="fa"></div></div></div><p id="fr"></p><p id="ff"></p><button class="add" id="fgo">Charger ce livre</button></section>
 <section id="pl" class="hide"><button id="back">‹ Bibliothèque</button>
 <div id="title"></div>
 <div id="fiche"><label id="covl">+ image<img id="cov" class="cov"><input id="ci" type="file" accept="image/*" class="hide"></label><textarea id="sum" placeholder="Résumé du livre : touche ici pour écrire"></textarea></div>
@@ -51,7 +53,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;heigh
 <div class="row"><button id="spd">Vitesse 1×</button><button id="chlink">Chapitres ↓</button></div>
 <div class="lbl">Arrêt automatique</div>
 <div class="row sl"><button data-m="15">15</button><button data-m="30">30</button><button data-m="45">45</button><button data-m="60">60</button></div>
-<div id="left"></div><div class="lbl" id="chl">Chapitres (🔖 = là où tu t’es arrêté)</div><div id="chs"></div></section>
+<div id="left"></div><div class="lbl" id="chl">Chapitres (🔖 = là où tu t’es arrêté)</div><div id="chs"></div><button id="done" class="add" style="background:var(--pn);color:var(--tx);margin:20px 0 30px">Terminé : supprimer ce livre</button></section>
 <audio id="au" preload="auto"></audio>
 
 <script src="jszip.min.js"></script>
@@ -61,24 +63,30 @@ function ls(k,v){try{if(v===undefined)return JSON.parse(localStorage.getItem(k))
 function open(){return new Promise(function(ok,ko){var r=indexedDB.open('lecteur',1);r.onupgradeneeded=function(){r.result.createObjectStore('tracks',{keyPath:'id',autoIncrement:true}).createIndex('book','book')};r.onsuccess=function(){db=r.result;ok()};r.onerror=function(){ko(r.error)}})}
 function tx(m){return db.transaction('tracks',m).objectStore('tracks')}
 function fmt(s){s=Math.floor(s||0);var h=Math.floor(s/3600),m=Math.floor(s%3600/60),r=s%60;return(h?h+':'+('0'+m).slice(-2):m)+':'+('0'+r).slice(-2)}
-function renderLib(){books=ls('books')||[];var l=$('list');l.innerHTML='';
+function renderLib(){renderCat();books=ls('books')||[];var l=$('list');l.innerHTML='';
  if(!books.length)l.innerHTML='<p style="color:var(--mu)">Aucun livre. Touche « Ajouter un livre » et choisis tous les fichiers MP3 du livre.</p>';
  books.forEach(function(b){var p=ls('pos_'+b.id),d=document.createElement('div');d.className='book';
   var q=p&&(p.i>0||p.t>5)?p:null;d.innerHTML='<button class="t"><img class="cov"><span>'+b.title.replace(/</g,'&lt;')+'<small>'+b.n+' chapitres'+(q?' · reprise au chapitre '+(q.i+1)+' à '+fmt(q.t):'')+'</small><i class="bar"><b style="width:'+(q?Math.round((q.i+1)/b.n*100):0)+'%"></b></i></span></button><button class="x">✕</button>';setCover(d.querySelector('img'),b.id);
   d.children[0].onclick=function(){play(b)};d.children[1].onclick=function(){del(b)};l.appendChild(d)})}
-function del(b){if(!confirm('Supprimer « '+b.title+' » de l’iPad ?'))return;
- var rq=tx('readonly').index('book').getAllKeys(b.id);rq.onsuccess=function(){var s=tx('readwrite');rq.result.forEach(function(k){s.delete(k)});
- ls('books',books.filter(function(x){return x.id!==b.id}));localStorage.removeItem('pos_'+b.id);localStorage.removeItem('cov_'+b.id);localStorage.removeItem('sum_'+b.id);renderLib()}}
+function inCat(id){return (ls('cat')||[]).some(function(c){return c.id===id})}
+function del(b,done){var keep=!done&&inCat(b.id);
+ var m=done?'Livre terminé ? Il sera supprimé de l’iPad.':keep?'Retirer « '+b.title+' » de l’iPad ? Tu pourras le recharger depuis « À télécharger » et reprendre au même endroit.':'Supprimer « '+b.title+' » définitivement de l’iPad ?';
+ if(!confirm(m))return;if(cur&&cur.id===b.id){au.pause();cur=null;tracks=[]}
+ var rq=tx('readonly').index('book').getAllKeys(b.id);rq.onsuccess=function(){var st=tx('readwrite');rq.result.forEach(function(k){st.delete(k)});
+  ls('books',(ls('books')||[]).filter(function(x){return x.id!==b.id}));if(!keep)localStorage.removeItem('pos_'+b.id);localStorage.removeItem('cov_'+b.id);localStorage.removeItem('sum_'+b.id);
+  $('pl').classList.add('hide');$('lib').classList.remove('hide');renderLib()}}
 function put(r){return new Promise(function(ok,ko){var q=tx('readwrite').add(r);q.onsuccess=ok;q.onerror=function(){ko(q.error)}})}
 function purge(id){return new Promise(function(ok){var q=tx('readonly').index('book').getAllKeys(id);q.onsuccess=function(){var st=tx('readwrite');q.result.forEach(function(k){st.delete(k)});st.transaction.oncomplete=ok}})}
 function nat(a,b){return a.localeCompare(b,undefined,{numeric:true})}
 function status(m){$('st').textContent=m||''}
 var AUD=/\.(mp3|m4a|m4b|aac|wav|ogg)$/i,MIME={mp3:'audio/mpeg',m4a:'audio/mp4',m4b:'audio/mp4',aac:'audio/aac',wav:'audio/wav',ogg:'audio/ogg'};
-function finish(id,t,n){var b=ls('books')||[];b.push({id:id,title:t,n:n});ls('books',b);status();renderLib()}
-async function importZip(f){
- var t=prompt('Titre du livre :',f.name.replace(/\.zip$/i,'').replace(/_+/g,' '));if(!t)return;
- var id=Date.now();
- try{status('Ouverture de '+f.name+'…');var z=await JSZip.loadAsync(f);
+async function dropBook(id){await purge(id);ls('books',(ls('books')||[]).filter(function(x){return x.id!==id}))}
+async function finish(id,t,n,w){var b=ls('books')||[];b.push({id:id,title:t,n:n});ls('books',b);
+ if(w){ls('sum_'+id,w.resume||'');if(w.image){try{var r=await fetch(w.image);await coverFrom(await r.blob(),id)}catch(e){}}}status();renderLib()}
+async function importZip(f,w){
+ var t=w?w.titre:prompt('Titre du livre :',f.name.replace(/\.zip$/i,'').replace(/_+/g,' '));if(!t)return;
+ var id=w?w.id:Date.now();
+ try{if(w)await dropBook(id);status('Ouverture de '+f.name+'…');var z=await JSZip.loadAsync(f);
   var names=Object.keys(z.files).filter(function(n){return !z.files[n].dir&&!/__MACOSX|(^|\/)\./.test(n)});
   var aus=names.filter(function(n){return AUD.test(n)}).sort(nat);
   if(!aus.length){status();alert('Aucun fichier audio trouvé dans ce zip.');return}
@@ -86,16 +94,19 @@ async function importZip(f){
    var buf=await z.files[aus[i]].async('arraybuffer');
    await put({book:id,idx:i,name:aus[i].split('/').pop(),blob:new Blob([buf],{type:MIME[aus[i].split('.').pop().toLowerCase()]})})}
   var im=names.filter(function(n){return /\.(jpe?g|png)$/i.test(n)}).sort(nat)[0];
-  if(im){var ib=await z.files[im].async('arraybuffer');await coverFrom(new Blob([ib]),id)}
-  finish(id,t,aus.length)
+  if(im&&!w){var ib=await z.files[im].async('arraybuffer');await coverFrom(new Blob([ib]),id)}
+  await finish(id,t,aus.length,w)
  }catch(err){status();await purge(id);alert('Import impossible ('+(err&&err.message||err)+'). Le zip est peut-être trop gros : essaie avec les MP3 seuls.')}}
-async function importFiles(fs){
+async function importFiles(fs,w){
  fs.sort(function(a,b){return nat(a.name,b.name)});
- var t=prompt('Titre du livre :',fs[0].name.replace(/\.[^.]+$/,'').replace(/[\s_-]*\d+$/,''));if(!t)return;var id=Date.now();
- try{for(var i=0;i<fs.length;i++){status('Import du chapitre '+(i+1)+' sur '+fs.length+'…');await put({book:id,idx:i,name:fs[i].name,blob:fs[i]})}finish(id,t,fs.length)}
+ var t=w?w.titre:prompt('Titre du livre :',fs[0].name.replace(/\.[^.]+$/,'').replace(/[\s_-]*\d+$/,''));if(!t)return;var id=w?w.id:Date.now();
+ try{if(w)await dropBook(id);for(var i=0;i<fs.length;i++){status('Import du chapitre '+(i+1)+' sur '+fs.length+'…');await put({book:id,idx:i,name:fs[i].name,blob:fs[i]})}await finish(id,t,fs.length,w)}
  catch(err){status();await purge(id);alert('Espace insuffisant ou erreur : essaie avec moins de fichiers.')}}
 $('f').onchange=async function(e){var fs=[].slice.call(e.target.files);e.target.value='';if(!fs.length)return;
  var z=fs.filter(function(f){return /\.zip$/i.test(f.name)}),r=fs.filter(function(f){return !/\.zip$/i.test(f.name)});
+ var w=want;want=null;if(w){$('fi').classList.add('hide');$('lib').classList.remove('hide')}
+ if(w&&z.length){if(w.fichier&&z[0].name!==w.fichier&&!confirm('Tu as choisi « '+z[0].name+' » mais le livre attendu est « '+w.fichier+' ». Continuer ?'))return;await importZip(z[0],w);return}
+ if(w&&r.length){await importFiles(r,w);return}
  for(var k=0;k<z.length;k++)await importZip(z[k]);if(r.length)await importFiles(r)};
 function play(b){cur=b;$('lib').classList.add('hide');$('pl').classList.remove('hide');$('title').textContent=b.title;tracks=[];setCover($('cov'),b.id);$('sum').value=ls('sum_'+b.id)||'';
  var rq=tx('readonly').index('book').getAll(b.id);rq.onsuccess=function(){tracks=rq.result.sort(function(a,c){return a.idx-c.idx});
@@ -132,6 +143,20 @@ function coverFrom(blob,id){return new Promise(function(ok){var im=new Image(),u
  im.onload=function(){var c=document.createElement('canvas');c.width=240;c.height=320;var x=c.getContext('2d'),r=Math.max(240/im.width,320/im.height),w=im.width*r,h=im.height*r;
   x.drawImage(im,(240-w)/2,(320-h)/2,w,h);ls('cov_'+id,c.toDataURL('image/jpeg',0.75));URL.revokeObjectURL(u);ok()};im.onerror=function(){ok()};im.src=u})}
 $('ci').onchange=function(e){var f=e.target.files[0];e.target.value='';if(f&&cur)coverFrom(f,cur.id).then(function(){setCover($('cov'),cur.id)})};
+var want=null;
+function esc(x){return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+function renderCat(){var cs=ls('cat')||[],have=(ls('books')||[]).map(function(b){return b.id}),h=$('cat'),list=cs.filter(function(c){return have.indexOf(c.id)<0});
+ h.innerHTML='';$('cath').classList.toggle('hide',!list.length);
+ list.forEach(function(c){var d=document.createElement('div');d.className='book';
+  d.innerHTML='<button class="t"><img class="cov"><span>'+esc(c.titre)+'<small>'+esc(c.auteur)+'</small></span></button>';
+  if(c.image)d.querySelector('img').src=c.image;d.children[0].onclick=function(){showFiche(c)};h.appendChild(d)})}
+function showFiche(c){want=c;$('lib').classList.add('hide');$('fi').classList.remove('hide');$('ft').textContent=c.titre;$('fa').textContent=c.auteur||'';$('fr').textContent=c.resume||'';
+ var im=$('fcov');if(c.image)im.src=c.image;else im.removeAttribute('src');var p=ls('pos_'+c.id);
+ $('ff').textContent='À choisir dans iCloud Drive : '+(c.fichier||'ses fichiers MP3')+(p&&(p.i>0||p.t>5)?' · tu étais au chapitre '+(p.i+1):'')}
+$('fback').onclick=function(){want=null;$('fi').classList.add('hide');$('lib').classList.remove('hide')};
+$('fgo').onclick=function(){$('f').click()};
+$('done').onclick=function(){if(cur)del(cur,true)};
+function loadCat(){fetch('catalogue.json').then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){if(j&&j.livres){ls('cat',j.livres);renderLib()}}).catch(function(){})}
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
-open().then(renderLib).catch(function(){$('list').textContent='Stockage indisponible sur ce navigateur.'});
+open().then(function(){renderLib();loadCat()}).catch(function(){$('list').textContent='Stockage indisponible sur ce navigateur.'});
 </script></body></html>
