@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lecteur">
+<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-180.png">
+<title>Lecteur du soir</title>
+<style>
+:root{--bg:#1b1a2e;--pn:#26243f;--tx:#e8e1d0;--mu:#8d89a8;--ac:#d9b26f}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--tx);font:20px Georgia,serif}
+body{padding:env(safe-area-inset-top) 20px env(safe-area-inset-bottom);max-width:720px;margin:0 auto;overflow-y:auto}
+h1{font-size:30px;font-weight:normal;margin:22px 0 14px}
+button{font:inherit;color:var(--tx);background:var(--pn);border:0;border-radius:14px;padding:16px 20px}
+button:active{background:#34315a}
+.hide{display:none}
+.book{display:flex;gap:10px;margin-bottom:10px}
+.book .t{flex:1;text-align:left;padding:20px}.book .t small{display:block;color:var(--mu);font-size:16px;margin-top:4px}
+.book .x{color:var(--mu);width:64px}
+.add{background:var(--ac);color:#1b1a2e;width:100%;margin-top:8px}
+#title{font-size:26px;margin:18px 0 4px}#chap,#time,#left{color:var(--mu);font-size:17px;margin:2px 0}
+input[type=range]{width:100%;margin:18px 0 6px;-webkit-appearance:none;height:8px;border-radius:4px;background:var(--pn)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;border-radius:50%;background:var(--ac)}
+.row{display:flex;gap:10px;margin:14px 0}.row button{flex:1;padding:22px 0}
+#pp{background:var(--ac);color:#1b1a2e;flex:1.6;font-size:28px}
+.lbl{color:var(--mu);font-size:17px;margin:22px 0 4px}
+.sl button.on{background:var(--ac);color:#1b1a2e}
+#back{background:none;color:var(--mu);padding:12px 0}
+</style></head><body>
+<section id="lib"><h1>Ma bibliothèque</h1><div id="list"></div>
+<button class="add" onclick="document.getElementById('f').click()">Ajouter un livre</button>
+<input id="f" type="file" accept="audio/*" multiple class="hide"></section>
+
+<section id="pl" class="hide"><button id="back">‹ Bibliothèque</button>
+<div id="title"></div><div id="chap"></div>
+<input id="seek" type="range" min="0" max="1000" value="0">
+<div id="time"></div>
+<div class="row"><button id="prev">⏮</button><button id="m30">−30 s</button><button id="pp">▶</button><button id="p30">+30 s</button><button id="next">⏭</button></div>
+<div class="row"><button id="spd">Vitesse 1×</button></div>
+<div class="lbl">Arrêt automatique</div>
+<div class="row sl"><button data-m="15">15</button><button data-m="30">30</button><button data-m="45">45</button><button data-m="60">60</button></div>
+<div id="left"></div></section>
+<audio id="au" preload="auto"></audio>
+
+<script>
+var $=function(i){return document.getElementById(i)},au=$('au'),db,books=[],cur=null,tracks=[],ti=0,sleepEnd=0,speeds=[0.8,1,1.2,1.5],si=1,pending=null;
+function ls(k,v){try{if(v===undefined)return JSON.parse(localStorage.getItem(k));localStorage.setItem(k,JSON.stringify(v));}catch(e){return null}}
+function open(){return new Promise(function(ok,ko){var r=indexedDB.open('lecteur',1);r.onupgradeneeded=function(){r.result.createObjectStore('tracks',{keyPath:'id',autoIncrement:true}).createIndex('book','book')};r.onsuccess=function(){db=r.result;ok()};r.onerror=function(){ko(r.error)}})}
+function tx(m){return db.transaction('tracks',m).objectStore('tracks')}
+function fmt(s){s=Math.floor(s||0);var h=Math.floor(s/3600),m=Math.floor(s%3600/60),r=s%60;return(h?h+':'+('0'+m).slice(-2):m)+':'+('0'+r).slice(-2)}
+function renderLib(){books=ls('books')||[];var l=$('list');l.innerHTML='';
+ if(!books.length)l.innerHTML='<p style="color:var(--mu)">Aucun livre. Touche « Ajouter un livre » et choisis tous les fichiers MP3 du livre.</p>';
+ books.forEach(function(b){var p=ls('pos_'+b.id),d=document.createElement('div');d.className='book';
+  d.innerHTML='<button class="t">'+b.title.replace(/</g,'&lt;')+'<small>'+b.n+' chapitres'+(p?' · reprise au chapitre '+(p.i+1):'')+'</small></button><button class="x">✕</button>';
+  d.children[0].onclick=function(){play(b)};d.children[1].onclick=function(){del(b)};l.appendChild(d)})}
+function del(b){if(!confirm('Supprimer « '+b.title+' » de l’iPad ?'))return;
+ var rq=tx('readonly').index('book').getAllKeys(b.id);rq.onsuccess=function(){var s=tx('readwrite');rq.result.forEach(function(k){s.delete(k)});
+ ls('books',books.filter(function(x){return x.id!==b.id}));localStorage.removeItem('pos_'+b.id);renderLib()}}
+$('f').onchange=function(e){var fs=[].slice.call(e.target.files);e.target.value='';if(!fs.length)return;
+ fs.sort(function(a,b){return a.name.localeCompare(b.name,undefined,{numeric:true})});
+ var t=prompt('Titre du livre :',fs[0].name.replace(/\.[^.]+$/,'').replace(/[\s_-]*\d+$/,''));if(!t)return;
+ var id=Date.now(),s=tx('readwrite');fs.forEach(function(f,i){s.add({book:id,idx:i,name:f.name,blob:f})});
+ s.transaction.oncomplete=function(){var b=ls('books')||[];b.push({id:id,title:t,n:fs.length});ls('books',b);renderLib()};
+ s.transaction.onerror=function(){alert('Espace insuffisant ou erreur : essaie avec moins de fichiers.')}};
+function play(b){cur=b;$('lib').classList.add('hide');$('pl').classList.remove('hide');$('title').textContent=b.title;
+ var rq=tx('readonly').index('book').getAll(b.id);rq.onsuccess=function(){tracks=rq.result.sort(function(a,c){return a.idx-c.idx});
+  var p=ls('pos_'+b.id)||{i:0,t:0};load(Math.min(p.i,tracks.length-1),p.t,false)}}
+function load(i,t,go){ti=i;if(au.src)URL.revokeObjectURL(au.src);au.src=URL.createObjectURL(tracks[i].blob);au.playbackRate=speeds[si];pending=t||0;
+ $('chap').textContent='Chapitre '+(i+1)+' sur '+tracks.length;au.load();if(go)au.play();media()}
+au.onloadedmetadata=function(){if(pending){au.currentTime=pending}pending=null;au.playbackRate=speeds[si]};
+au.onended=function(){if(ti<tracks.length-1)load(ti+1,0,true);else{save(true);$('pp').textContent='▶'}};
+au.onplay=function(){$('pp').textContent='⏸'};au.onpause=function(){$('pp').textContent='▶';save()};
+au.ontimeupdate=function(){if(!pending){$('seek').value=au.duration?au.currentTime/au.duration*1000:0;$('time').textContent=fmt(au.currentTime)+' / '+fmt(au.duration)}
+ if(sleepEnd&&Date.now()>=sleepEnd)stopSleep(true)};
+setInterval(function(){if(!au.paused)save();if(sleepEnd){var r=Math.ceil((sleepEnd-Date.now())/60000);$('left').textContent=r>0?'Arrêt dans '+r+' min':''}},5000);
+function save(reset){if(cur&&tracks.length&&!pending)ls('pos_'+cur.id,reset?{i:0,t:0}:{i:ti,t:au.currentTime})}
+$('pp').onclick=function(){au.paused?au.play():au.pause()};
+$('m30').onclick=function(){au.currentTime=Math.max(0,au.currentTime-30)};
+$('p30').onclick=function(){au.currentTime=Math.min(au.duration||1e9,au.currentTime+30)};
+$('prev').onclick=function(){if(au.currentTime>5||ti===0)au.currentTime=0;else load(ti-1,0,!au.paused)};
+$('next').onclick=function(){if(ti<tracks.length-1)load(ti+1,0,!au.paused)};
+$('seek').onchange=function(){if(au.duration)au.currentTime=this.value/1000*au.duration};
+$('spd').onclick=function(){si=(si+1)%speeds.length;au.playbackRate=speeds[si];this.textContent='Vitesse '+speeds[si]+'×'};
+$('back').onclick=function(){au.pause();$('pl').classList.add('hide');$('lib').classList.remove('hide');renderLib()};
+function stopSleep(fire){sleepEnd=0;$('left').textContent='';[].forEach.call(document.querySelectorAll('.sl button'),function(b){b.classList.remove('on')});if(fire)au.pause()}
+[].forEach.call(document.querySelectorAll('.sl button'),function(b){b.onclick=function(){var on=b.classList.contains('on');stopSleep(false);
+ if(!on){sleepEnd=Date.now()+b.dataset.m*60000;b.classList.add('on');$('left').textContent='Arrêt dans '+b.dataset.m+' min';setTimeout(function(){if(sleepEnd&&Date.now()>=sleepEnd)stopSleep(true)},b.dataset.m*60000+500)}}});
+function media(){if(!('mediaSession'in navigator)||!window.MediaMetadata)return;navigator.mediaSession.metadata=new MediaMetadata({title:'Chapitre '+(ti+1),artist:cur.title});
+ navigator.mediaSession.setActionHandler('play',function(){au.play()});navigator.mediaSession.setActionHandler('pause',function(){au.pause()})}
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
+open().then(renderLib).catch(function(){$('list').textContent='Stockage indisponible sur ce navigateur.'});
+</script></body></html>
