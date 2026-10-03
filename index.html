@@ -14,7 +14,7 @@ body{padding:env(safe-area-inset-top) 20px env(safe-area-inset-bottom);max-width
 h1{font-size:30px;font-weight:normal;margin:22px 0 14px}
 button{font:inherit;color:var(--tx);background:var(--pn);border:0;border-radius:14px;padding:16px 20px}
 button:active{background:#34315a}
-.hide{display:none}
+.hide{display:none}.vh{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}label.add{display:block;text-align:center;border-radius:14px;padding:16px 20px;cursor:pointer;-webkit-user-select:none;user-select:none}
 .book{display:flex;gap:10px;margin-bottom:10px}
 .book .t{flex:1;text-align:left;padding:20px}.book .t small{display:block;color:var(--mu);font-size:16px;margin-top:4px}
 .book .x{color:var(--mu);width:64px}
@@ -39,13 +39,13 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;heigh
 .ch.cur{background:var(--ac);color:#1b1a2e}.ch.cur span{color:#1b1a2e}.ch.cur:before{content:'🔖 '}
 </style></head><body>
 <section id="lib"><h1>Sur l’iPad</h1><div id="list"></div><h1 id="cath" class="hide">À télécharger</h1><div id="cat"></div>
-<button class="add" onclick="want=null;document.getElementById('f').click()">Ajouter un livre hors catalogue</button>
-<div id="st" style="color:var(--mu);margin-top:14px"></div><input id="f" type="file" accept="audio/*,.zip,application/zip" multiple class="hide"></section>
+<label class="add" for="f" onclick="want=null">Ajouter un livre hors catalogue</label>
+<div id="st" style="color:var(--mu);margin-top:14px"></div><input id="f" type="file" multiple class="vh"></section>
 
 <section id="fi" class="hide"><button id="fback">‹ Bibliothèque</button><div id="fh"><img id="fcov" class="cov"><div><div id="ft"></div><div id="fa"></div></div></div><p id="fr"></p><p id="ff"></p><button class="add" id="fgo">Charger ce livre</button></section>
 <section id="pl" class="hide"><button id="back">‹ Bibliothèque</button>
 <div id="title"></div>
-<div id="fiche"><label id="covl">+ image<img id="cov" class="cov"><input id="ci" type="file" accept="image/*" class="hide"></label><textarea id="sum" placeholder="Résumé du livre : touche ici pour écrire"></textarea></div>
+<div id="fiche"><label id="covl">+ image<img id="cov" class="cov"><input id="ci" type="file" accept="image/*" class="vh"></label><textarea id="sum" placeholder="Résumé du livre : touche ici pour écrire"></textarea></div>
 <div id="chap"></div>
 <input id="seek" type="range" min="0" max="1000" value="0">
 <div id="time"></div>
@@ -58,6 +58,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;heigh
 
 <script src="jszip.min.js"></script>
 <script>
+window.onerror=function(m,u,l){alert("Erreur : "+m+" (ligne "+l+")")};
 var $=function(i){return document.getElementById(i)},au=$('au'),db,books=[],cur=null,tracks=[],ti=0,sleepEnd=0,speeds=[0.8,1,1.2,1.5],si=1,pending=null;
 function ls(k,v){try{if(v===undefined)return JSON.parse(localStorage.getItem(k));localStorage.setItem(k,JSON.stringify(v));}catch(e){return null}}
 function open(){return new Promise(function(ok,ko){var r=indexedDB.open('lecteur',1);r.onupgradeneeded=function(){r.result.createObjectStore('tracks',{keyPath:'id',autoIncrement:true}).createIndex('book','book')};r.onsuccess=function(){db=r.result;ok()};r.onerror=function(){ko(r.error)}})}
