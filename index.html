@@ -27,20 +27,31 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;heigh
 .lbl{color:var(--mu);font-size:17px;margin:22px 0 4px}
 .sl button.on{background:var(--ac);color:#1b1a2e}
 #back{background:none;color:var(--mu);padding:12px 0}
+.book .t{display:flex;align-items:center;gap:14px}.t span{flex:1}
+.cov{width:64px;height:86px;border-radius:8px;object-fit:cover;background:var(--pn);flex:none}.cov:not([src]){visibility:hidden}
+#fiche{display:flex;gap:14px;margin:6px 0 10px}
+#covl{flex:none;width:96px;height:128px;border-radius:10px;background:var(--pn);color:var(--mu);font-size:15px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+#cov{position:absolute;top:0;left:0;width:100%;height:100%;border-radius:0}
+#sum{flex:1;min-width:0;min-height:128px;background:var(--pn);color:var(--tx);border:0;border-radius:12px;padding:12px;font:16px Georgia,serif;resize:none}
+.bar{display:block;height:5px;background:#34315a;border-radius:3px;margin-top:8px}.bar b{display:block;height:100%;background:var(--ac);border-radius:3px}
+.ch{display:block;width:100%;text-align:left;margin-bottom:8px;font-size:18px;padding:14px 16px}.ch span{color:var(--mu);margin-right:8px}
+.ch.cur{background:var(--ac);color:#1b1a2e}.ch.cur span{color:#1b1a2e}.ch.cur:before{content:'🔖 '}
 </style></head><body>
 <section id="lib"><h1>Ma bibliothèque</h1><div id="list"></div>
 <button class="add" onclick="document.getElementById('f').click()">Ajouter un livre</button>
 <input id="f" type="file" accept="audio/*" multiple class="hide"></section>
 
 <section id="pl" class="hide"><button id="back">‹ Bibliothèque</button>
-<div id="title"></div><div id="chap"></div>
+<div id="title"></div>
+<div id="fiche"><label id="covl">+ image<img id="cov" class="cov"><input id="ci" type="file" accept="image/*" class="hide"></label><textarea id="sum" placeholder="Résumé du livre : touche ici pour écrire"></textarea></div>
+<div id="chap"></div>
 <input id="seek" type="range" min="0" max="1000" value="0">
 <div id="time"></div>
 <div class="row"><button id="prev">⏮</button><button id="m30">−30 s</button><button id="pp">▶</button><button id="p30">+30 s</button><button id="next">⏭</button></div>
-<div class="row"><button id="spd">Vitesse 1×</button></div>
+<div class="row"><button id="spd">Vitesse 1×</button><button id="chlink">Chapitres ↓</button></div>
 <div class="lbl">Arrêt automatique</div>
 <div class="row sl"><button data-m="15">15</button><button data-m="30">30</button><button data-m="45">45</button><button data-m="60">60</button></div>
-<div id="left"></div></section>
+<div id="left"></div><div class="lbl" id="chl">Chapitres (🔖 = là où tu t’es arrêté)</div><div id="chs"></div></section>
 <audio id="au" preload="auto"></audio>
 
 <script>
@@ -52,22 +63,22 @@ function fmt(s){s=Math.floor(s||0);var h=Math.floor(s/3600),m=Math.floor(s%3600/
 function renderLib(){books=ls('books')||[];var l=$('list');l.innerHTML='';
  if(!books.length)l.innerHTML='<p style="color:var(--mu)">Aucun livre. Touche « Ajouter un livre » et choisis tous les fichiers MP3 du livre.</p>';
  books.forEach(function(b){var p=ls('pos_'+b.id),d=document.createElement('div');d.className='book';
-  d.innerHTML='<button class="t">'+b.title.replace(/</g,'&lt;')+'<small>'+b.n+' chapitres'+(p?' · reprise au chapitre '+(p.i+1):'')+'</small></button><button class="x">✕</button>';
+  var q=p&&(p.i>0||p.t>5)?p:null;d.innerHTML='<button class="t"><img class="cov"><span>'+b.title.replace(/</g,'&lt;')+'<small>'+b.n+' chapitres'+(q?' · reprise au chapitre '+(q.i+1)+' à '+fmt(q.t):'')+'</small><i class="bar"><b style="width:'+(q?Math.round((q.i+1)/b.n*100):0)+'%"></b></i></span></button><button class="x">✕</button>';setCover(d.querySelector('img'),b.id);
   d.children[0].onclick=function(){play(b)};d.children[1].onclick=function(){del(b)};l.appendChild(d)})}
 function del(b){if(!confirm('Supprimer « '+b.title+' » de l’iPad ?'))return;
  var rq=tx('readonly').index('book').getAllKeys(b.id);rq.onsuccess=function(){var s=tx('readwrite');rq.result.forEach(function(k){s.delete(k)});
- ls('books',books.filter(function(x){return x.id!==b.id}));localStorage.removeItem('pos_'+b.id);renderLib()}}
+ ls('books',books.filter(function(x){return x.id!==b.id}));localStorage.removeItem('pos_'+b.id);localStorage.removeItem('cov_'+b.id);localStorage.removeItem('sum_'+b.id);renderLib()}}
 $('f').onchange=function(e){var fs=[].slice.call(e.target.files);e.target.value='';if(!fs.length)return;
  fs.sort(function(a,b){return a.name.localeCompare(b.name,undefined,{numeric:true})});
  var t=prompt('Titre du livre :',fs[0].name.replace(/\.[^.]+$/,'').replace(/[\s_-]*\d+$/,''));if(!t)return;
  var id=Date.now(),s=tx('readwrite');fs.forEach(function(f,i){s.add({book:id,idx:i,name:f.name,blob:f})});
  s.transaction.oncomplete=function(){var b=ls('books')||[];b.push({id:id,title:t,n:fs.length});ls('books',b);renderLib()};
  s.transaction.onerror=function(){alert('Espace insuffisant ou erreur : essaie avec moins de fichiers.')}};
-function play(b){cur=b;$('lib').classList.add('hide');$('pl').classList.remove('hide');$('title').textContent=b.title;
+function play(b){cur=b;$('lib').classList.add('hide');$('pl').classList.remove('hide');$('title').textContent=b.title;tracks=[];setCover($('cov'),b.id);$('sum').value=ls('sum_'+b.id)||'';
  var rq=tx('readonly').index('book').getAll(b.id);rq.onsuccess=function(){tracks=rq.result.sort(function(a,c){return a.idx-c.idx});
-  var p=ls('pos_'+b.id)||{i:0,t:0};load(Math.min(p.i,tracks.length-1),p.t,false)}}
+  renderChs();var p=ls('pos_'+b.id)||{i:0,t:0};load(Math.min(p.i,tracks.length-1),p.t,false)}}
 function load(i,t,go){ti=i;if(au.src)URL.revokeObjectURL(au.src);au.src=URL.createObjectURL(tracks[i].blob);au.playbackRate=speeds[si];pending=t||0;
- $('chap').textContent='Chapitre '+(i+1)+' sur '+tracks.length;au.load();if(go)au.play();media()}
+ $('chap').textContent='Chapitre '+(i+1)+' sur '+tracks.length;markCur();au.load();if(go)au.play();media()}
 au.onloadedmetadata=function(){if(pending){au.currentTime=pending}pending=null;au.playbackRate=speeds[si]};
 au.onended=function(){if(ti<tracks.length-1)load(ti+1,0,true);else{save(true);$('pp').textContent='▶'}};
 au.onplay=function(){$('pp').textContent='⏸'};au.onpause=function(){$('pp').textContent='▶';save()};
@@ -88,6 +99,15 @@ function stopSleep(fire){sleepEnd=0;$('left').textContent='';[].forEach.call(doc
  if(!on){sleepEnd=Date.now()+b.dataset.m*60000;b.classList.add('on');$('left').textContent='Arrêt dans '+b.dataset.m+' min';setTimeout(function(){if(sleepEnd&&Date.now()>=sleepEnd)stopSleep(true)},b.dataset.m*60000+500)}}});
 function media(){if(!('mediaSession'in navigator)||!window.MediaMetadata)return;navigator.mediaSession.metadata=new MediaMetadata({title:'Chapitre '+(ti+1),artist:cur.title});
  navigator.mediaSession.setActionHandler('play',function(){au.play()});navigator.mediaSession.setActionHandler('pause',function(){au.pause()})}
+function setCover(img,id){var c=ls('cov_'+id);if(c)img.src=c;else img.removeAttribute('src')}
+function renderChs(){var h=$('chs');h.innerHTML='';tracks.forEach(function(t,i){var b=document.createElement('button');b.className='ch';
+ b.innerHTML='<span>'+(i+1)+'</span>'+t.name.replace(/\.[^.]+$/,'').replace(/_+/g,' ').replace(/</g,'&lt;');b.onclick=function(){load(i,0,true)};h.appendChild(b)})}
+function markCur(){[].forEach.call($('chs').children,function(b,i){b.classList.toggle('cur',i===ti)})}
+$('chlink').onclick=function(){$('chl').scrollIntoView(true)};
+$('sum').onchange=function(){if(cur)ls('sum_'+cur.id,this.value)};
+$('ci').onchange=function(e){var f=e.target.files[0];if(!f||!cur)return;var im=new Image(),u=URL.createObjectURL(f);
+ im.onload=function(){var c=document.createElement('canvas');c.width=240;c.height=320;var x=c.getContext('2d'),r=Math.max(240/im.width,320/im.height),w=im.width*r,h=im.height*r;
+  x.drawImage(im,(240-w)/2,(320-h)/2,w,h);ls('cov_'+cur.id,c.toDataURL('image/jpeg',0.75));setCover($('cov'),cur.id);URL.revokeObjectURL(u)};im.src=u;e.target.value=''};
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
 open().then(renderLib).catch(function(){$('list').textContent='Stockage indisponible sur ce navigateur.'});
 </script></body></html>
