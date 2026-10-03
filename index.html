@@ -39,7 +39,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;heigh
 </style></head><body>
 <section id="lib"><h1>Ma bibliothèque</h1><div id="list"></div>
 <button class="add" onclick="document.getElementById('f').click()">Ajouter un livre</button>
-<input id="f" type="file" accept="audio/*" multiple class="hide"></section>
+<div id="st" style="color:var(--mu);margin-top:14px"></div><input id="f" type="file" accept="audio/*,.zip,application/zip" multiple class="hide"></section>
 
 <section id="pl" class="hide"><button id="back">‹ Bibliothèque</button>
 <div id="title"></div>
@@ -54,6 +54,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;heigh
 <div id="left"></div><div class="lbl" id="chl">Chapitres (🔖 = là où tu t’es arrêté)</div><div id="chs"></div></section>
 <audio id="au" preload="auto"></audio>
 
+<script src="jszip.min.js"></script>
 <script>
 var $=function(i){return document.getElementById(i)},au=$('au'),db,books=[],cur=null,tracks=[],ti=0,sleepEnd=0,speeds=[0.8,1,1.2,1.5],si=1,pending=null;
 function ls(k,v){try{if(v===undefined)return JSON.parse(localStorage.getItem(k));localStorage.setItem(k,JSON.stringify(v));}catch(e){return null}}
@@ -68,12 +69,34 @@ function renderLib(){books=ls('books')||[];var l=$('list');l.innerHTML='';
 function del(b){if(!confirm('Supprimer « '+b.title+' » de l’iPad ?'))return;
  var rq=tx('readonly').index('book').getAllKeys(b.id);rq.onsuccess=function(){var s=tx('readwrite');rq.result.forEach(function(k){s.delete(k)});
  ls('books',books.filter(function(x){return x.id!==b.id}));localStorage.removeItem('pos_'+b.id);localStorage.removeItem('cov_'+b.id);localStorage.removeItem('sum_'+b.id);renderLib()}}
-$('f').onchange=function(e){var fs=[].slice.call(e.target.files);e.target.value='';if(!fs.length)return;
- fs.sort(function(a,b){return a.name.localeCompare(b.name,undefined,{numeric:true})});
- var t=prompt('Titre du livre :',fs[0].name.replace(/\.[^.]+$/,'').replace(/[\s_-]*\d+$/,''));if(!t)return;
- var id=Date.now(),s=tx('readwrite');fs.forEach(function(f,i){s.add({book:id,idx:i,name:f.name,blob:f})});
- s.transaction.oncomplete=function(){var b=ls('books')||[];b.push({id:id,title:t,n:fs.length});ls('books',b);renderLib()};
- s.transaction.onerror=function(){alert('Espace insuffisant ou erreur : essaie avec moins de fichiers.')}};
+function put(r){return new Promise(function(ok,ko){var q=tx('readwrite').add(r);q.onsuccess=ok;q.onerror=function(){ko(q.error)}})}
+function purge(id){return new Promise(function(ok){var q=tx('readonly').index('book').getAllKeys(id);q.onsuccess=function(){var st=tx('readwrite');q.result.forEach(function(k){st.delete(k)});st.transaction.oncomplete=ok}})}
+function nat(a,b){return a.localeCompare(b,undefined,{numeric:true})}
+function status(m){$('st').textContent=m||''}
+var AUD=/\.(mp3|m4a|m4b|aac|wav|ogg)$/i,MIME={mp3:'audio/mpeg',m4a:'audio/mp4',m4b:'audio/mp4',aac:'audio/aac',wav:'audio/wav',ogg:'audio/ogg'};
+function finish(id,t,n){var b=ls('books')||[];b.push({id:id,title:t,n:n});ls('books',b);status();renderLib()}
+async function importZip(f){
+ var t=prompt('Titre du livre :',f.name.replace(/\.zip$/i,'').replace(/_+/g,' '));if(!t)return;
+ var id=Date.now();
+ try{status('Ouverture de '+f.name+'…');var z=await JSZip.loadAsync(f);
+  var names=Object.keys(z.files).filter(function(n){return !z.files[n].dir&&!/__MACOSX|(^|\/)\./.test(n)});
+  var aus=names.filter(function(n){return AUD.test(n)}).sort(nat);
+  if(!aus.length){status();alert('Aucun fichier audio trouvé dans ce zip.');return}
+  for(var i=0;i<aus.length;i++){status('Import du chapitre '+(i+1)+' sur '+aus.length+'…');
+   var buf=await z.files[aus[i]].async('arraybuffer');
+   await put({book:id,idx:i,name:aus[i].split('/').pop(),blob:new Blob([buf],{type:MIME[aus[i].split('.').pop().toLowerCase()]})})}
+  var im=names.filter(function(n){return /\.(jpe?g|png)$/i.test(n)}).sort(nat)[0];
+  if(im){var ib=await z.files[im].async('arraybuffer');await coverFrom(new Blob([ib]),id)}
+  finish(id,t,aus.length)
+ }catch(err){status();await purge(id);alert('Import impossible ('+(err&&err.message||err)+'). Le zip est peut-être trop gros : essaie avec les MP3 seuls.')}}
+async function importFiles(fs){
+ fs.sort(function(a,b){return nat(a.name,b.name)});
+ var t=prompt('Titre du livre :',fs[0].name.replace(/\.[^.]+$/,'').replace(/[\s_-]*\d+$/,''));if(!t)return;var id=Date.now();
+ try{for(var i=0;i<fs.length;i++){status('Import du chapitre '+(i+1)+' sur '+fs.length+'…');await put({book:id,idx:i,name:fs[i].name,blob:fs[i]})}finish(id,t,fs.length)}
+ catch(err){status();await purge(id);alert('Espace insuffisant ou erreur : essaie avec moins de fichiers.')}}
+$('f').onchange=async function(e){var fs=[].slice.call(e.target.files);e.target.value='';if(!fs.length)return;
+ var z=fs.filter(function(f){return /\.zip$/i.test(f.name)}),r=fs.filter(function(f){return !/\.zip$/i.test(f.name)});
+ for(var k=0;k<z.length;k++)await importZip(z[k]);if(r.length)await importFiles(r)};
 function play(b){cur=b;$('lib').classList.add('hide');$('pl').classList.remove('hide');$('title').textContent=b.title;tracks=[];setCover($('cov'),b.id);$('sum').value=ls('sum_'+b.id)||'';
  var rq=tx('readonly').index('book').getAll(b.id);rq.onsuccess=function(){tracks=rq.result.sort(function(a,c){return a.idx-c.idx});
   renderChs();var p=ls('pos_'+b.id)||{i:0,t:0};load(Math.min(p.i,tracks.length-1),p.t,false)}}
@@ -105,9 +128,10 @@ function renderChs(){var h=$('chs');h.innerHTML='';tracks.forEach(function(t,i){
 function markCur(){[].forEach.call($('chs').children,function(b,i){b.classList.toggle('cur',i===ti)})}
 $('chlink').onclick=function(){$('chl').scrollIntoView(true)};
 $('sum').onchange=function(){if(cur)ls('sum_'+cur.id,this.value)};
-$('ci').onchange=function(e){var f=e.target.files[0];if(!f||!cur)return;var im=new Image(),u=URL.createObjectURL(f);
+function coverFrom(blob,id){return new Promise(function(ok){var im=new Image(),u=URL.createObjectURL(blob);
  im.onload=function(){var c=document.createElement('canvas');c.width=240;c.height=320;var x=c.getContext('2d'),r=Math.max(240/im.width,320/im.height),w=im.width*r,h=im.height*r;
-  x.drawImage(im,(240-w)/2,(320-h)/2,w,h);ls('cov_'+cur.id,c.toDataURL('image/jpeg',0.75));setCover($('cov'),cur.id);URL.revokeObjectURL(u)};im.src=u;e.target.value=''};
+  x.drawImage(im,(240-w)/2,(320-h)/2,w,h);ls('cov_'+id,c.toDataURL('image/jpeg',0.75));URL.revokeObjectURL(u);ok()};im.onerror=function(){ok()};im.src=u})}
+$('ci').onchange=function(e){var f=e.target.files[0];e.target.value='';if(f&&cur)coverFrom(f,cur.id).then(function(){setCover($('cov'),cur.id)})};
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
 open().then(renderLib).catch(function(){$('list').textContent='Stockage indisponible sur ce navigateur.'});
 </script></body></html>
