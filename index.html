@@ -83,18 +83,25 @@ var AUD=/\.(mp3|m4a|m4b|aac|wav|ogg)$/i,MIME={mp3:'audio/mpeg',m4a:'audio/mp4',m
 async function dropBook(id){await purge(id);ls('books',(ls('books')||[]).filter(function(x){return x.id!==id}))}
 async function finish(id,t,n,w){var b=ls('books')||[];b.push({id:id,title:t,n:n});ls('books',b);
  if(w){ls('sum_'+id,w.resume||'');if(w.image){try{var r=await fetch(w.image);await coverFrom(await r.blob(),id)}catch(e){}}}status();renderLib()}
+async function collect(z,prefix,out){
+ var ns=Object.keys(z.files).filter(function(n){return !z.files[n].dir&&!/__MACOSX|(^|\/)\./.test(n)});
+ for(var i=0;i<ns.length;i++){var n=ns[i];
+  if(AUD.test(n))out.aud.push({p:prefix+n,e:z.files[n]});
+  else if(/\.(jpe?g|png)$/i.test(n))out.img.push({p:prefix+n,e:z.files[n]});
+  else if(/\.zip$/i.test(n)){var sub=await JSZip.loadAsync(await z.files[n].async('arraybuffer'));await collect(sub,prefix+n+'/',out)}}}
 async function importZip(f,w){
  var t=w?w.titre:prompt('Titre du livre :',f.name.replace(/\.zip$/i,'').replace(/_+/g,' '));if(!t)return;
  var id=w?w.id:Date.now();
  try{if(w)await dropBook(id);status('Ouverture de '+f.name+'…');var z=await JSZip.loadAsync(f);
-  var names=Object.keys(z.files).filter(function(n){return !z.files[n].dir&&!/__MACOSX|(^|\/)\./.test(n)});
-  var aus=names.filter(function(n){return AUD.test(n)}).sort(nat);
+  var out={aud:[],img:[]};status('Lecture du contenu…');await collect(z,'',out);
+  var aus=out.aud.sort(function(a,b){return nat(a.p,b.p)});
   if(!aus.length){status();alert('Aucun fichier audio trouvé dans ce zip.');return}
+  var par={};aus.forEach(function(x){par[x.p.split('/').slice(0,-1).join('/')]=1});var multi=Object.keys(par).length>1;
   for(var i=0;i<aus.length;i++){status('Import du chapitre '+(i+1)+' sur '+aus.length+'…');
-   var buf=await z.files[aus[i]].async('arraybuffer');
-   await put({book:id,idx:i,name:aus[i].split('/').pop(),blob:new Blob([buf],{type:MIME[aus[i].split('.').pop().toLowerCase()]})})}
-  var im=names.filter(function(n){return /\.(jpe?g|png)$/i.test(n)}).sort(nat)[0];
-  if(im&&!w){var ib=await z.files[im].async('arraybuffer');await coverFrom(new Blob([ib]),id)}
+   var buf=await aus[i].e.async('arraybuffer');
+   await put({book:id,idx:i,name:(multi?aus[i].p.split('/').slice(-2).join(' – '):aus[i].p.split('/').pop()),blob:new Blob([buf],{type:MIME[aus[i].p.split('.').pop().toLowerCase()]})})}
+  var im=out.img.sort(function(a,b){return nat(a.p,b.p)})[0];
+  if(im&&!w){var ib=await im.e.async('arraybuffer');await coverFrom(new Blob([ib]),id)}
   await finish(id,t,aus.length,w)
  }catch(err){status();await purge(id);alert('Import impossible ('+(err&&err.message||err)+'). Le zip est peut-être trop gros : essaie avec les MP3 seuls.')}}
 async function importFiles(fs,w){
